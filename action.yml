@@ -1,6 +1,12 @@
 name: deploy-nsite-to-pages
 description: Mirror a Nostr nsite to GitHub Pages.
-author: ''
+author: Origami74
+
+# Marketplace branding. `radio` evokes the Nostr-relay broadcast model
+# (signal in → cached and rebroadcast); purple nods to the Nostr brand.
+branding:
+  icon: radio
+  color: purple
 
 # Generic composite action: pulls an nsite by pubkey (and optional named-nsite
 # identifier) and publishes it to GitHub Pages. Reusable from any repo that
