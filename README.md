@@ -64,6 +64,24 @@ gossiped a NIP-65 relay list (kind 10002) or a Blossom server list
 | `page_url`   | URL of the published Pages site                               |
 | `file_count` | number of files downloaded from the nsite                     |
 
+## One-time GitHub Pages setup
+
+Before the workflow can publish anything, enable Pages on the repo:
+
+1. **Settings → Pages → Build and deployment → Source**: pick
+   **GitHub Actions**. (The default "Deploy from a branch" mode won't work
+   — this action publishes via the Pages-deployment API, not by pushing to
+   `gh-pages`.)
+2. *(Optional)* **Settings → Pages → Custom domain**: enter a domain you
+   own (e.g. `awesome.example.com`) and add the matching `CNAME` /
+   `A`-record at your DNS provider as GitHub instructs. Pages will issue
+   the TLS cert automatically.
+
+Custom domains set in Settings persist across deploys. If GitHub keeps
+losing the setting between runs, include a `CNAME` file (containing just
+the domain) in the published nsite itself — `nsyte deploy` will upload it
+alongside everything else, and this action will mirror it through.
+
 ## Requirements on the calling workflow
 
 - A runner with `curl` + `bash` (any `ubuntu-latest` works)
