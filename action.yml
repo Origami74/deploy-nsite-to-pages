@@ -1,0 +1,109 @@
+name: deploy-nsite-to-pages
+description: Mirror a Nostr nsite to GitHub Pages.
+author: ''
+
+# Generic composite action: pulls an nsite by pubkey (and optional named-nsite
+# identifier) and publishes it to GitHub Pages. Reusable from any repo that
+# has Pages enabled with the GitHub Actions source.
+#
+# The calling workflow must:
+#   - run on a runner with curl + bash (any ubuntu-latest works)
+#   - grant `pages: write` and `id-token: write` permissions
+#   - check out the repo so this action.yml is on disk (when used as `uses: ./`)
+#   - set the `github-pages` environment on the deploying job
+
+inputs:
+  pubkey:
+    description: 'npub, hex pubkey, or NIP-05 (e.g. user@example.com) of the nsite publisher'
+    required: true
+  name:
+    description: 'Name for a named nsite (kind 35128). Leave empty to mirror the root site (kind 15128).'
+    required: false
+    default: ''
+  output-dir:
+    description: 'Local directory the nsite is downloaded into and uploaded from'
+    required: false
+    default: 'site'
+  relays:
+    description: 'Comma-separated relay overrides for the download step'
+    required: false
+    default: ''
+  servers:
+    description: 'Comma-separated Blossom server overrides for the download step'
+    required: false
+    default: ''
+
+outputs:
+  page_url:
+    description: 'URL of the published Pages site'
+    value: ${{ steps.deployment.outputs.page_url }}
+  file_count:
+    description: 'Number of files downloaded from the nsite'
+    value: ${{ steps.download.outputs.file_count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install nsyte
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL https://nsyte.run/get/install.sh | bash
+        # The installer drops the binary in one of a few places depending on
+        # version. Add every plausible location to PATH; the verify step
+        # below catches a complete miss with a useful error.
+        for d in "$HOME/.nsyte/bin" "$HOME/.local/bin" "/usr/local/bin"; do
+          [ -d "$d" ] && echo "$d" >> "$GITHUB_PATH"
+        done
+
+    - name: Verify nsyte
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v nsyte >/dev/null 2>&1; then
+          echo "::error::nsyte not on PATH after install"
+          exit 1
+        fi
+        nsyte --version
+
+    - name: Download nsite
+      id: download
+      shell: bash
+      env:
+        PUBKEY: ${{ inputs.pubkey }}
+        NAME: ${{ inputs.name }}
+        OUT: ${{ inputs.output-dir }}
+        RELAYS: ${{ inputs.relays }}
+        SERVERS: ${{ inputs.servers }}
+      run: |
+        set -euo pipefail
+        if [ -z "$PUBKEY" ]; then
+          echo "::error::pubkey input is required"
+          exit 1
+        fi
+        mkdir -p "$OUT"
+        ARGS=(download -p "$PUBKEY" -o "$OUT" --overwrite)
+        [ -n "$NAME" ] && ARGS+=(-d "$NAME")
+        [ -n "$RELAYS" ] && ARGS+=(-r "$RELAYS")
+        [ -n "$SERVERS" ] && ARGS+=(-s "$SERVERS")
+        nsyte "${ARGS[@]}"
+        # Refuse to publish an empty site over a previous good mirror.
+        if [ -z "$(ls -A "$OUT" 2>/dev/null)" ]; then
+          echo "::error::nsite download produced no files"
+          exit 1
+        fi
+        COUNT=$(find "$OUT" -type f | wc -l | tr -d ' ')
+        echo "file_count=$COUNT" >> "$GITHUB_OUTPUT"
+        echo "Downloaded $COUNT files into $OUT"
+
+    - name: Configure Pages
+      uses: actions/configure-pages@v5
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ${{ inputs.output-dir }}
+
+    - name: Deploy to Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

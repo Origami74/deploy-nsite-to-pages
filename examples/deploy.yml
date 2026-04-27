@@ -1,0 +1,60 @@
+# Example workflow that uses deploy-nsite-to-pages to mirror an nsite to
+# GitHub Pages on a 6-hourly schedule. Drop this into your repo as
+# `.github/workflows/deploy.yml` and adjust the `env:` block.
+#
+# Pattern: keep the publisher-specific values (pubkey, named-site
+# identifier, optional Blossom servers) in `env:` so they're easy to spot
+# and change. Manual dispatch can override pubkey + name for one-off
+# mirrors of other nsites without editing the workflow.
+
+name: Mirror nsite to Pages
+
+env:
+  # The awesome.fips.network publisher, as a working example.
+  NSITE_PUBKEY: npub1y0gja7r4re0wyelmvdqa03qmjs62rwvcd8szzt4nf4t2hd43969qj000ly
+  NSITE_NAME: awesome
+  # Hardcoded server list — only needed while the publisher hasn't
+  # gossiped a kind-10063 Blossom server list. Once they do, drop this
+  # line and `nsyte download` will discover servers automatically.
+  NSITE_SERVERS: https://cdn.hzrd149.com,https://blossom.primal.net
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      pubkey:
+        description: "Override pubkey (npub, hex, or NIP-05)"
+        required: false
+        type: string
+      name:
+        description: "Override named-nsite name (leave blank for root)"
+        required: false
+        type: string
+
+# Newest deploy wins; older runs cancel so we never publish a stale snapshot
+# over a fresher one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.mirror.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: mirror
+        uses: Origami74/deploy-nsite-to-pages@v1
+        with:
+          pubkey: ${{ inputs.pubkey || env.NSITE_PUBKEY }}
+          name: ${{ inputs.name || env.NSITE_NAME }}
+          servers: ${{ env.NSITE_SERVERS }}
